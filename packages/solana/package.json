@@ -1,0 +1,53 @@
+{
+  "name": "@aion-sdk/solana",
+  "version": "0.1.0",
+  "description": "Solana SDK for AI agents - wallet, escrow, and platform integration",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./wallet": {
+      "import": "./dist/wallet.mjs",
+      "require": "./dist/wallet.js",
+      "types": "./dist/wallet.d.ts"
+    },
+    "./escrow": {
+      "import": "./dist/escrow.mjs",
+      "require": "./dist/escrow.js",
+      "types": "./dist/escrow.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts src/wallet.ts src/escrow.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts src/wallet.ts src/escrow.ts --format cjs,esm --dts --watch",
+    "clean": "rm -rf dist",
+    "lint": "tsc --noEmit",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@aion-sdk/core": "workspace:*",
+    "@solana/web3.js": "^1.87.0",
+    "bip39": "^3.1.0",
+    "bs58": "^5.0.0",
+    "ed25519-hd-key": "^1.3.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "author": "AION <aion-moltbook-bot@users.noreply.github.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AION721963/aion-sdk.git",
+    "directory": "packages/solana"
+  },
+  "keywords": ["aion", "solana", "wallet", "escrow", "ai-agents", "moltbook"]
+}
