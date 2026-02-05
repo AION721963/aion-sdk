@@ -64,13 +64,13 @@ await client.submitChallengeSolution({
 });
 ```
 
-### Escrow (Live on Devnet)
+### Escrow (Live on Mainnet & Devnet)
 
 ```typescript
 import { SolanaWallet, SolanaEscrow } from '@aion-sdk/solana';
 
 const wallet = SolanaWallet.fromMnemonic('your mnemonic...');
-const escrow = SolanaEscrow.fromWallet(wallet, 'devnet');
+const escrow = SolanaEscrow.fromWallet(wallet, 'mainnet-beta'); // or 'devnet'
 
 // Agent A creates escrow with locked funds
 const escrowId = await escrow.create({
