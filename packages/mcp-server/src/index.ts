@@ -590,6 +590,347 @@ server.tool(
   },
 );
 
+// ── Milestone Escrow Tools ───────────────────────────────────────────
+
+function deriveMilestoneEscrowPda(creator: PublicKey, escrowId: BN): [PublicKey, number] {
+  const idBuffer = Buffer.alloc(8);
+  idBuffer.writeBigUInt64LE(BigInt(escrowId.toString()));
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("milestone_escrow"), creator.toBuffer(), idBuffer],
+    ESCROW_PROGRAM_ID,
+  );
+}
+
+server.tool(
+  "create_milestone_escrow",
+  "Create milestone-based escrow. Splits work into up to 10 milestones, each with its own payment amount. Creator releases payments milestone by milestone.",
+  {
+    recipient: z.string().describe("Recipient (executor) wallet address"),
+    deadline_hours: z.number().positive().default(168).describe("Deadline in hours (default: 168 = 1 week)"),
+    terms: z.string().optional().describe("Overall task description"),
+    arbiter: z.string().optional().describe("Optional arbiter for disputes"),
+    milestones: z.array(z.object({
+      amount: z.number().positive().describe("Amount in SOL for this milestone"),
+      description: z.string().describe("Description of this milestone"),
+    })).min(1).max(10).describe("Array of milestones (1-10)"),
+  },
+  async ({ recipient, deadline_hours, terms, arbiter, milestones }) => {
+    try {
+      const w = requireWallet();
+      const program = getProgram();
+
+      const recipientPubkey = new PublicKey(recipient);
+      const arbiterPubkey = arbiter ? new PublicKey(arbiter) : w.publicKey;
+      const feeRecipientPubkey = new PublicKey("GjJ4vt7YDjBEmawgxmAEeyD4WuTLXeMZCr5raYGg5ijo");
+
+      const escrowIdBytes = new Uint8Array(8);
+      crypto.getRandomValues(escrowIdBytes);
+      const escrowId = new BN(Buffer.from(escrowIdBytes), "le");
+
+      const [escrowPda] = deriveMilestoneEscrowPda(w.publicKey, escrowId);
+      const deadlineUnix = new BN(Math.floor((Date.now() + deadline_hours * 3600000) / 1000));
+      const termsHash = terms
+        ? Array.from(createHash("sha256").update(terms).digest())
+        : Array(32).fill(0);
+
+      const milestoneInputs = milestones.map((m) => ({
+        amount: new BN(Math.round(m.amount * LAMPORTS_PER_SOL)),
+        descriptionHash: Array.from(createHash("sha256").update(m.description).digest()),
+      }));
+
+      const totalSol = milestones.reduce((sum, m) => sum + m.amount, 0);
+
+      await program.methods
+        .createMilestoneEscrow(escrowId, deadlineUnix, termsHash, 10, milestoneInputs)
+        .accounts({
+          escrowAccount: escrowPda,
+          creator: w.publicKey,
+          recipient: recipientPubkey,
+          arbiter: arbiterPubkey,
+          feeRecipient: feeRecipientPubkey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      return json({
+        escrowId: escrowPda.toBase58(),
+        type: "milestone",
+        totalAmount: totalSol,
+        milestoneCount: milestones.length,
+        milestones: milestones.map((m, i) => ({ index: i, amount: m.amount, description: m.description })),
+        recipient,
+        deadline: new Date(Date.now() + deadline_hours * 3600000).toISOString(),
+        network: NETWORK,
+        status: "created",
+      });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  "accept_milestone_task",
+  "Accept a milestone escrow task as executor. Status changes from Created to Active.",
+  {
+    escrow_id: z.string().describe("Milestone escrow PDA address"),
+  },
+  async ({ escrow_id }) => {
+    try {
+      const w = requireWallet();
+      const program = getProgram();
+
+      const sig = await program.methods
+        .acceptMilestoneTask()
+        .accounts({
+          escrowAccount: new PublicKey(escrow_id),
+          recipient: w.publicKey,
+        })
+        .rpc();
+
+      return json({ escrowId: escrow_id, signature: sig, status: "active" });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  "release_milestone",
+  "Release payment for a specific milestone (creator only). Each milestone is released individually.",
+  {
+    escrow_id: z.string().describe("Milestone escrow PDA address"),
+    milestone_index: z.number().int().min(0).max(9).describe("Index of the milestone to release (0-based)"),
+  },
+  async ({ escrow_id, milestone_index }) => {
+    try {
+      const w = requireWallet();
+      const program = getProgram();
+      const escrowPubkey = new PublicKey(escrow_id);
+
+      const escrowData = await program.account.milestoneEscrowAccount.fetch(escrowPubkey);
+
+      const sig = await program.methods
+        .releaseMilestone(milestone_index)
+        .accounts({
+          escrowAccount: escrowPubkey,
+          creator: w.publicKey,
+          recipient: escrowData.recipient as PublicKey,
+          feeRecipient: escrowData.feeRecipient as PublicKey,
+        })
+        .rpc();
+
+      return json({ escrowId: escrow_id, milestoneIndex: milestone_index, signature: sig, status: "milestone_released" });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  "dispute_milestone",
+  "Dispute a specific milestone (creator or executor). Only pending milestones can be disputed.",
+  {
+    escrow_id: z.string().describe("Milestone escrow PDA address"),
+    milestone_index: z.number().int().min(0).max(9).describe("Index of the milestone to dispute (0-based)"),
+  },
+  async ({ escrow_id, milestone_index }) => {
+    try {
+      const w = requireWallet();
+      const program = getProgram();
+
+      const sig = await program.methods
+        .disputeMilestone(milestone_index)
+        .accounts({
+          escrowAccount: new PublicKey(escrow_id),
+          disputer: w.publicKey,
+        })
+        .rpc();
+
+      return json({ escrowId: escrow_id, milestoneIndex: milestone_index, signature: sig, status: "disputed" });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  "resolve_milestone_dispute",
+  "Resolve a milestone dispute (arbiter only). Sends funds to the winner.",
+  {
+    escrow_id: z.string().describe("Milestone escrow PDA address"),
+    milestone_index: z.number().int().min(0).max(9).describe("Index of the disputed milestone"),
+    winner: z.enum(["creator", "recipient"]).describe("Who wins: 'creator' or 'recipient'"),
+  },
+  async ({ escrow_id, milestone_index, winner }) => {
+    try {
+      const w = requireWallet();
+      const program = getProgram();
+      const escrowPubkey = new PublicKey(escrow_id);
+
+      const escrowData = await program.account.milestoneEscrowAccount.fetch(escrowPubkey);
+      const winnerEnum = winner === "creator" ? { creator: {} } : { recipient: {} };
+
+      const sig = await program.methods
+        .resolveMilestoneDispute(milestone_index, winnerEnum)
+        .accounts({
+          escrowAccount: escrowPubkey,
+          arbiter: w.publicKey,
+          creator: escrowData.creator as PublicKey,
+          recipient: escrowData.recipient as PublicKey,
+          feeRecipient: escrowData.feeRecipient as PublicKey,
+        })
+        .rpc();
+
+      return json({ escrowId: escrow_id, milestoneIndex: milestone_index, winner, signature: sig, status: "resolved" });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  "get_milestone_escrow",
+  "Get milestone escrow status and all milestone details",
+  {
+    escrow_id: z.string().describe("Milestone escrow PDA address"),
+  },
+  async ({ escrow_id }) => {
+    try {
+      const program = getProgram();
+      const escrowPubkey = new PublicKey(escrow_id);
+
+      const data = await program.account.milestoneEscrowAccount.fetch(escrowPubkey);
+      const status = data.status as any;
+      const statusStr = status.created !== undefined ? "created"
+        : status.active !== undefined ? "active"
+        : status.completed !== undefined ? "completed"
+        : status.disputed !== undefined ? "disputed"
+        : status.refunded !== undefined ? "refunded"
+        : "unknown";
+
+      const milestoneCount = data.milestoneCount as number;
+      const rawMilestones = data.milestones as any[];
+
+      const milestones = rawMilestones.slice(0, milestoneCount).map((m: any, i: number) => {
+        const ms = m.status as any;
+        const msStatus = ms.pending !== undefined ? "pending"
+          : ms.released !== undefined ? "released"
+          : ms.disputed !== undefined ? "disputed"
+          : "unknown";
+
+        return {
+          index: i,
+          amount_sol: (m.amount as BN).toNumber() / LAMPORTS_PER_SOL,
+          status: msStatus,
+        };
+      });
+
+      return json({
+        id: escrow_id,
+        type: "milestone",
+        creator: (data.creator as PublicKey).toBase58(),
+        recipient: (data.recipient as PublicKey).toBase58(),
+        totalAmount_sol: (data.totalAmount as BN).toNumber() / LAMPORTS_PER_SOL,
+        releasedAmount_sol: (data.releasedAmount as BN).toNumber() / LAMPORTS_PER_SOL,
+        status: statusStr,
+        deadline: new Date((data.deadline as BN).toNumber() * 1000).toISOString(),
+        milestoneCount,
+        milestones,
+        network: NETWORK,
+      });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+// ── Dispute Resolution Tools ────────────────────────────────────────
+
+server.tool(
+  "dispute_escrow",
+  "Open a dispute on a SOL escrow (creator or executor). Reason is stored on-chain.",
+  {
+    escrow_id: z.string().describe("Escrow PDA address"),
+    reason: z.string().max(64).describe("Reason for dispute (max 64 chars)"),
+  },
+  async ({ escrow_id, reason }) => {
+    try {
+      const e = requireEscrow();
+      const sig = await e.dispute(escrow_id, reason);
+      return json({ escrowId: escrow_id, signature: sig, reason, status: "disputed" });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  "resolve_dispute",
+  "Resolve a SOL escrow dispute (arbiter only). Sends funds to the winner.",
+  {
+    escrow_id: z.string().describe("Escrow PDA address"),
+    winner: z.enum(["creator", "recipient"]).describe("Who wins the dispute"),
+  },
+  async ({ escrow_id, winner }) => {
+    try {
+      const e = requireEscrow();
+      const sig = await e.resolveDispute(escrow_id, winner);
+      return json({ escrowId: escrow_id, winner, signature: sig, status: "resolved" });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  "resolve_token_dispute",
+  "Resolve a token escrow dispute (arbiter only). Sends tokens to the winner.",
+  {
+    escrow_id: z.string().describe("Token escrow PDA address"),
+    winner: z.enum(["creator", "recipient"]).describe("Who wins the dispute"),
+  },
+  async ({ escrow_id, winner }) => {
+    try {
+      const w = requireWallet();
+      const program = getProgram();
+      const escrowPubkey = new PublicKey(escrow_id);
+
+      const escrowData = await program.account.tokenEscrowAccount.fetch(escrowPubkey);
+      const mintPubkey = escrowData.mint as PublicKey;
+      const creatorPubkey = escrowData.creator as PublicKey;
+      const recipientPubkey = escrowData.recipient as PublicKey;
+      const feeRecipientPubkey = escrowData.feeRecipient as PublicKey;
+
+      const [vaultPda] = deriveTokenVaultPda(escrowPubkey);
+      const creatorTokenAccount = await getAssociatedTokenAddress(mintPubkey, creatorPubkey);
+      const recipientTokenAccount = await getAssociatedTokenAddress(mintPubkey, recipientPubkey);
+      const feeTokenAccount = await getAssociatedTokenAddress(mintPubkey, feeRecipientPubkey);
+
+      const winnerEnum = winner === "creator" ? { creator: {} } : { recipient: {} };
+
+      const sig = await program.methods
+        .resolveTokenDispute(winnerEnum)
+        .accounts({
+          escrowAccount: escrowPubkey,
+          vault: vaultPda,
+          arbiter: w.publicKey,
+          creator: creatorPubkey,
+          recipient: recipientPubkey,
+          creatorTokenAccount,
+          recipientTokenAccount,
+          feeTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      return json({ escrowId: escrow_id, winner, signature: sig, status: "resolved" });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
 // ── Reputation Tools ─────────────────────────────────────────────────
 
 server.tool(

@@ -14,7 +14,8 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "test": "turbo test",
-    "clean": "turbo clean && rm -rf node_modules"
+    "clean": "turbo clean && rm -rf node_modules",
+    "publish:all": "pnpm build && pnpm -r publish --no-git-checks"
   },
   "devDependencies": {
     "@coral-xyz/anchor": "0.29.0",

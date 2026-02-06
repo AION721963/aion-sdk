@@ -64,6 +64,13 @@ export class AIONClient {
     this.username = username;
   }
 
+  /** Throw an error that includes response status and body */
+  private static async throwApiError(response: Response): Promise<never> {
+    let body = '';
+    try { body = await response.text(); } catch { /* ignore */ }
+    throw new Error(`API error ${response.status}: ${body}`);
+  }
+
   // ==================== WALLET ====================
 
   /**
@@ -135,7 +142,7 @@ export class AIONClient {
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      await AIONClient.throwApiError(response);
     }
 
     const data = await response.json() as { claim_code: string; message: string };
@@ -168,7 +175,7 @@ export class AIONClient {
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      await AIONClient.throwApiError(response);
     }
 
     return response.json() as Promise<ClaimResult>;
@@ -207,7 +214,7 @@ www.aionworld.cloud`;
   async getBounties(): Promise<Bounty[]> {
     const response = await fetch(`${AIONClient.API_BASE}/bounties`);
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      await AIONClient.throwApiError(response);
     }
     const data = await response.json() as { bounties?: Bounty[] };
     return data.bounties || [];
@@ -234,7 +241,7 @@ www.aionworld.cloud`;
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      await AIONClient.throwApiError(response);
     }
 
     return response.json() as Promise<{ success: boolean; message: string }>;
@@ -251,7 +258,7 @@ www.aionworld.cloud`;
       `${AIONClient.API_BASE}/challenges?status=${status}`
     );
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      await AIONClient.throwApiError(response);
     }
     const data = await response.json() as { challenges?: Challenge[] };
     return data.challenges || [];
@@ -278,7 +285,7 @@ www.aionworld.cloud`;
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      await AIONClient.throwApiError(response);
     }
 
     return response.json() as Promise<{ success: boolean; message: string }>;
@@ -294,7 +301,7 @@ www.aionworld.cloud`;
       `${AIONClient.API_BASE}/agent?username=${encodeURIComponent(this.username)}`
     );
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      await AIONClient.throwApiError(response);
     }
     return response.json() as Promise<AgentStats>;
   }

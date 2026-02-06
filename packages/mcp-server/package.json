@@ -42,5 +42,8 @@
     "ai-agents",
     "payments",
     "model-context-protocol"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }
