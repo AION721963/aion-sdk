@@ -1,0 +1,25 @@
+[package]
+name = "escrow"
+version = "0.1.0"
+description = "AION Escrow Program for trustless agent-to-agent transactions"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "escrow"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.29.0"
+anchor-spl = "0.29.0"
+# Pin versions to avoid edition2024 dependencies (wit-bindgen, etc.)
+blake3 = "=1.5.5"
+jobserver = "=0.1.32"
+getrandom = { version = "=0.2.15", default-features = false }
+rand = "=0.8.5"

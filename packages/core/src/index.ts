@@ -80,6 +80,47 @@ export interface EscrowState {
   arbiter?: PublicKey;
   createdAt: number;
   completedAt?: number;
+  autoReleaseAt?: number;
+}
+
+/**
+ * Fee configuration for escrow transactions
+ */
+export interface FeeConfig {
+  /** Fee percentage (0-100). Default: 1.5% */
+  feePercent: number;
+  /** Fee recipient wallet address */
+  feeRecipient: string;
+}
+
+/** Default fee: 0.1% */
+export const DEFAULT_FEE_PERCENT = 0.1;
+
+/** Maximum allowed fee: 10% */
+export const MAX_FEE_PERCENT = 10;
+
+/** AION treasury address for fees */
+export const AION_TREASURY = 'GjJ4vt7YDjBEmawgxmAEeyD4WuTLXeMZCr5raYGg5ijo';
+
+/**
+ * Validate fee percentage
+ * @throws Error if fee is out of valid range
+ */
+export function validateFeePercent(feePercent: number): void {
+  if (feePercent < 0 || feePercent > MAX_FEE_PERCENT) {
+    throw new Error(`Fee must be between 0% and ${MAX_FEE_PERCENT}%`);
+  }
+}
+
+/**
+ * Calculate fee amount from total
+ * @param amount - Total amount in lamports
+ * @param feePercent - Fee percentage (0-100)
+ * @returns Fee amount in lamports
+ */
+export function calculateFee(amount: bigint, feePercent: number): bigint {
+  validateFeePercent(feePercent);
+  return (amount * BigInt(Math.round(feePercent * 100))) / BigInt(10000);
 }
 
 /**

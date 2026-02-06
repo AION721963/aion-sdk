@@ -1,0 +1,1453 @@
+{
+  "version": "0.1.0",
+  "name": "escrow",
+  "instructions": [
+    {
+      "name": "createEscrow",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "recipient",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "arbiter",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "feeRecipient",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "creatorReputation",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Creator's reputation account (optional - pass if tracking reputation)"
+          ]
+        },
+        {
+          "name": "recipientReputation",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Recipient's reputation account (optional - pass if tracking reputation)"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "escrowId",
+          "type": "u64"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "deadline",
+          "type": "i64"
+        },
+        {
+          "name": "termsHash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "feeBasisPoints",
+          "type": "u16"
+        },
+        {
+          "name": "autoReleaseAt",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "autoRelease",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "caller",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Anyone can trigger auto-release (no Signer constraint on caller)"
+          ]
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "recipient",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "feeRecipient",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creatorReputation",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Creator's reputation account (optional - pass if tracking reputation)"
+          ]
+        },
+        {
+          "name": "recipientReputation",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Recipient's reputation account (optional - pass if tracking reputation)"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "acceptTask",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "recipient",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "releasePayment",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "recipient",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "feeRecipient",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creatorReputation",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Creator's reputation account (optional - pass if tracking reputation)"
+          ]
+        },
+        {
+          "name": "recipientReputation",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Recipient's reputation account (optional - pass if tracking reputation)"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "requestRefund",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "dispute",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "disputer",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "disputerReputation",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Disputer's reputation account (optional - pass if tracking reputation)"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "reason",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "resolveDispute",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "arbiter",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "recipient",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "feeRecipient",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creatorReputation",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Creator's reputation account (optional - pass if tracking reputation)"
+          ]
+        },
+        {
+          "name": "recipientReputation",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": true,
+          "docs": [
+            "Recipient's reputation account (optional - pass if tracking reputation)"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "winner",
+          "type": {
+            "defined": "DisputeWinner"
+          }
+        }
+      ]
+    },
+    {
+      "name": "createTokenEscrow",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "recipient",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "arbiter",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "feeRecipient",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "mint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "creatorTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "rent",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "escrowId",
+          "type": "u64"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "deadline",
+          "type": "i64"
+        },
+        {
+          "name": "termsHash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "feeBasisPoints",
+          "type": "u16"
+        },
+        {
+          "name": "autoReleaseAt",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "acceptTokenTask",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "recipient",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "releaseTokenPayment",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "recipient",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "recipientTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "feeTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "refundTokenEscrow",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "creatorTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "disputeToken",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "disputer",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": [
+        {
+          "name": "reason",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "resolveTokenDispute",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "arbiter",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "recipient",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creatorTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "recipientTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "feeTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "winner",
+          "type": {
+            "defined": "DisputeWinner"
+          }
+        }
+      ]
+    },
+    {
+      "name": "autoReleaseToken",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "caller",
+          "isMut": false,
+          "isSigner": true,
+          "docs": [
+            "Anyone can trigger auto-release"
+          ]
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "recipient",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "recipientTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "feeTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "createMilestoneEscrow",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "recipient",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "arbiter",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "feeRecipient",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "escrowId",
+          "type": "u64"
+        },
+        {
+          "name": "deadline",
+          "type": "i64"
+        },
+        {
+          "name": "termsHash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "feeBasisPoints",
+          "type": "u16"
+        },
+        {
+          "name": "milestones",
+          "type": {
+            "vec": {
+              "defined": "MilestoneInput"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "acceptMilestoneTask",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "recipient",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "releaseMilestone",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "recipient",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "feeRecipient",
+          "isMut": true,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "milestoneIndex",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "disputeMilestone",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "disputer",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": [
+        {
+          "name": "milestoneIndex",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "resolveMilestoneDispute",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "arbiter",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "recipient",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "feeRecipient",
+          "isMut": true,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "milestoneIndex",
+          "type": "u8"
+        },
+        {
+          "name": "winner",
+          "type": {
+            "defined": "DisputeWinner"
+          }
+        }
+      ]
+    },
+    {
+      "name": "refundMilestoneEscrow",
+      "accounts": [
+        {
+          "name": "escrowAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initReputation",
+      "accounts": [
+        {
+          "name": "reputationAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "agent",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "payer",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "EscrowAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "creator",
+            "docs": [
+              "Creator (task poster) pubkey"
+            ],
+            "type": "publicKey"
+          },
+          {
+            "name": "recipient",
+            "docs": [
+              "Recipient (task executor) pubkey"
+            ],
+            "type": "publicKey"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Amount in lamports held in escrow"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "docs": [
+              "Current status"
+            ],
+            "type": {
+              "defined": "EscrowStatus"
+            }
+          },
+          {
+            "name": "deadline",
+            "docs": [
+              "Deadline as Unix timestamp (seconds)"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "termsHash",
+            "docs": [
+              "SHA256 hash of terms/agreement"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "arbiter",
+            "docs": [
+              "Arbiter pubkey (for dispute resolution)"
+            ],
+            "type": "publicKey"
+          },
+          {
+            "name": "feeBasisPoints",
+            "docs": [
+              "Fee in basis points (e.g. 150 = 1.5%)"
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "feeRecipient",
+            "docs": [
+              "Fee recipient (treasury) pubkey"
+            ],
+            "type": "publicKey"
+          },
+          {
+            "name": "createdAt",
+            "docs": [
+              "Creation timestamp (Unix seconds)"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "escrowId",
+            "docs": [
+              "Unique escrow ID"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "disputeReason",
+            "docs": [
+              "Dispute reason (truncated to 64 bytes)"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "autoReleaseAt",
+            "docs": [
+              "Auto-release timestamp (0 = disabled, >0 = unix timestamp when anyone can release)"
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokenEscrowAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "creator",
+            "docs": [
+              "Creator (task poster) pubkey"
+            ],
+            "type": "publicKey"
+          },
+          {
+            "name": "recipient",
+            "docs": [
+              "Recipient (task executor) pubkey"
+            ],
+            "type": "publicKey"
+          },
+          {
+            "name": "mint",
+            "docs": [
+              "SPL token mint address"
+            ],
+            "type": "publicKey"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Amount in token smallest units"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "docs": [
+              "Current status"
+            ],
+            "type": {
+              "defined": "EscrowStatus"
+            }
+          },
+          {
+            "name": "deadline",
+            "docs": [
+              "Deadline as Unix timestamp (seconds)"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "termsHash",
+            "docs": [
+              "SHA256 hash of terms/agreement"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "arbiter",
+            "docs": [
+              "Arbiter pubkey (for dispute resolution)"
+            ],
+            "type": "publicKey"
+          },
+          {
+            "name": "feeBasisPoints",
+            "docs": [
+              "Fee in basis points (e.g. 10 = 0.1%)"
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "feeRecipient",
+            "docs": [
+              "Fee recipient (treasury) pubkey"
+            ],
+            "type": "publicKey"
+          },
+          {
+            "name": "createdAt",
+            "docs": [
+              "Creation timestamp (Unix seconds)"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "escrowId",
+            "docs": [
+              "Unique escrow ID"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "disputeReason",
+            "docs": [
+              "Dispute reason (truncated to 64 bytes)"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "autoReleaseAt",
+            "docs": [
+              "Auto-release timestamp (0 = disabled)"
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MilestoneEscrowAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "creator",
+            "type": "publicKey"
+          },
+          {
+            "name": "recipient",
+            "type": "publicKey"
+          },
+          {
+            "name": "totalAmount",
+            "type": "u64"
+          },
+          {
+            "name": "releasedAmount",
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": "EscrowStatus"
+            }
+          },
+          {
+            "name": "deadline",
+            "type": "i64"
+          },
+          {
+            "name": "termsHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "arbiter",
+            "type": "publicKey"
+          },
+          {
+            "name": "feeBasisPoints",
+            "type": "u16"
+          },
+          {
+            "name": "feeRecipient",
+            "type": "publicKey"
+          },
+          {
+            "name": "createdAt",
+            "type": "i64"
+          },
+          {
+            "name": "escrowId",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "milestoneCount",
+            "type": "u8"
+          },
+          {
+            "name": "milestones",
+            "type": {
+              "array": [
+                {
+                  "defined": "Milestone"
+                },
+                10
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReputationAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "docs": [
+              "Agent's public key"
+            ],
+            "type": "publicKey"
+          },
+          {
+            "name": "escrowsCreated",
+            "docs": [
+              "Number of escrows created"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "escrowsCompleted",
+            "docs": [
+              "Number of escrows completed as creator"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "escrowsReceived",
+            "docs": [
+              "Number of escrows received as recipient"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "tasksCompleted",
+            "docs": [
+              "Number of tasks completed as recipient"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "disputesInitiated",
+            "docs": [
+              "Number of disputes initiated"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "disputesWon",
+            "docs": [
+              "Number of disputes won"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "disputesLost",
+            "docs": [
+              "Number of disputes lost"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "totalVolumeLamports",
+            "docs": [
+              "Total volume in lamports"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "lastActivity",
+            "docs": [
+              "Last activity timestamp"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "MilestoneInput",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "descriptionHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Milestone",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": "MilestoneStatus"
+            }
+          },
+          {
+            "name": "descriptionHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "DisputeWinner",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Creator"
+          },
+          {
+            "name": "Recipient"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Created"
+          },
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Completed"
+          },
+          {
+            "name": "Disputed"
+          },
+          {
+            "name": "Refunded"
+          },
+          {
+            "name": "Cancelled"
+          },
+          {
+            "name": "Resolved"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MilestoneStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pending"
+          },
+          {
+            "name": "Released"
+          },
+          {
+            "name": "Disputed"
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidStatus",
+      "msg": "Escrow is not in the expected status for this operation"
+    },
+    {
+      "code": 6001,
+      "name": "UnauthorizedCreator",
+      "msg": "Only the creator can perform this action"
+    },
+    {
+      "code": 6002,
+      "name": "UnauthorizedRecipient",
+      "msg": "Only the recipient can perform this action"
+    },
+    {
+      "code": 6003,
+      "name": "UnauthorizedArbiter",
+      "msg": "Only the arbiter can resolve disputes"
+    },
+    {
+      "code": 6004,
+      "name": "DeadlineNotReached",
+      "msg": "Deadline has not passed yet"
+    },
+    {
+      "code": 6005,
+      "name": "DeadlineExpired",
+      "msg": "Deadline has already passed"
+    },
+    {
+      "code": 6006,
+      "name": "FeeTooHigh",
+      "msg": "Fee basis points exceeds maximum (1000 = 10%)"
+    },
+    {
+      "code": 6007,
+      "name": "ZeroAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6008,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6009,
+      "name": "UnauthorizedDisputer",
+      "msg": "Only creator or recipient can dispute"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidAutoRelease",
+      "msg": "Auto-release timestamp must be after deadline"
+    },
+    {
+      "code": 6011,
+      "name": "AutoReleaseNotEnabled",
+      "msg": "Auto-release is not enabled for this escrow"
+    },
+    {
+      "code": 6012,
+      "name": "AutoReleaseNotReady",
+      "msg": "Auto-release timestamp has not been reached yet"
+    },
+    {
+      "code": 6013,
+      "name": "TooManyMilestones",
+      "msg": "Too many milestones (max 10)"
+    },
+    {
+      "code": 6014,
+      "name": "MilestoneAmountMismatch",
+      "msg": "Milestone amounts must sum to total amount"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidMilestoneIndex",
+      "msg": "Invalid milestone index"
+    },
+    {
+      "code": 6016,
+      "name": "MilestoneAlreadyReleased",
+      "msg": "Milestone already released"
+    },
+    {
+      "code": 6017,
+      "name": "MilestoneNotPending",
+      "msg": "Milestone is not in pending status"
+    }
+  ]
+}
