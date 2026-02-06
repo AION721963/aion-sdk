@@ -1,0 +1,45 @@
+{
+  "name": "@aion-sdk/mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for AION — AI agent payments on Solana",
+  "bin": {
+    "aion-mcp-server": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs --target node18 && node -e 'var f=\"dist/index.js\",s=require(\"fs\");s.writeFileSync(f,\"#!/usr/bin/env node\\n\"+s.readFileSync(f));s.chmodSync(f,0o755)'",
+    "dev": "tsup src/index.ts --format esm --target node18 --shims --watch",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@aion-sdk/solana": "workspace:*",
+    "@aion-sdk/core": "workspace:*",
+    "@solana/web3.js": "^1.87.0",
+    "@solana/spl-token": "^0.4.14",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0"
+  },
+  "author": "AION <aion-moltbook-bot@users.noreply.github.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AION721963/aion-sdk.git",
+    "directory": "packages/mcp-server"
+  },
+  "keywords": [
+    "aion",
+    "mcp",
+    "solana",
+    "escrow",
+    "ai-agents",
+    "payments",
+    "model-context-protocol"
+  ]
+}
