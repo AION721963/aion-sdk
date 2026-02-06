@@ -4,14 +4,18 @@ import { z } from "zod";
 import {
   SolanaWallet,
   SolanaEscrow,
+  ESCROW_PROGRAM_ID,
   generateWallet,
   importFromMnemonic,
   validateAddress,
   getRpcEndpoint,
   type Network,
 } from "@aion-sdk/solana";
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { Connection, PublicKey, LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js";
+import { Program, AnchorProvider, BN, type Idl } from "@coral-xyz/anchor";
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { createHash } from "crypto";
+import escrowIdl from "./idl.json";
 
 // ── Config from environment ──────────────────────────────────────────
 
@@ -51,6 +55,32 @@ function requireEscrow(): SolanaEscrow {
     );
   }
   return escrow;
+}
+
+function getProgram(): Program {
+  const w = requireWallet();
+  const provider = new AnchorProvider(
+    connection,
+    w as any,
+    { commitment: "confirmed" },
+  );
+  return new Program(escrowIdl as Idl, ESCROW_PROGRAM_ID, provider);
+}
+
+function deriveTokenEscrowPda(creator: PublicKey, escrowId: BN): [PublicKey, number] {
+  const idBuffer = Buffer.alloc(8);
+  idBuffer.writeBigUInt64LE(BigInt(escrowId.toString()));
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("token_escrow"), creator.toBuffer(), idBuffer],
+    ESCROW_PROGRAM_ID,
+  );
+}
+
+function deriveTokenVaultPda(escrowPda: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("token_vault"), escrowPda.toBuffer()],
+    ESCROW_PROGRAM_ID,
+  );
 }
 
 function text(content: string) {
@@ -333,6 +363,225 @@ server.tool(
         role,
         count: formatted.length,
         escrows: formatted,
+        network: NETWORK,
+      });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+// ── Token Escrow Tools (any SPL token) ───────────────────────────────
+
+server.tool(
+  "create_token_escrow",
+  "Create escrow with ANY SPL token (USDC, BONK, etc.). Agents choose their payment token. Locks tokens on-chain.",
+  {
+    mint: z.string().describe("SPL token mint address (e.g. USDC mint)"),
+    amount: z.number().positive().describe("Amount in token units (e.g. 10.5 USDC)"),
+    decimals: z.number().int().min(0).max(18).describe("Token decimals (USDC=6, most tokens=9)"),
+    recipient: z.string().describe("Recipient wallet address"),
+    deadline_hours: z.number().positive().default(24).describe("Deadline in hours (default: 24)"),
+    terms: z.string().optional().describe("Task description"),
+    arbiter: z.string().optional().describe("Optional arbiter for disputes"),
+  },
+  async ({ mint, amount, decimals, recipient, deadline_hours, terms, arbiter }) => {
+    try {
+      const w = requireWallet();
+      const program = getProgram();
+
+      const mintPubkey = new PublicKey(mint);
+      const recipientPubkey = new PublicKey(recipient);
+      const arbiterPubkey = arbiter ? new PublicKey(arbiter) : w.publicKey;
+      const feeRecipientPubkey = new PublicKey("GjJ4vt7YDjBEmawgxmAEeyD4WuTLXeMZCr5raYGg5ijo"); // AION Treasury
+
+      // Random escrow ID
+      const escrowIdBytes = new Uint8Array(8);
+      crypto.getRandomValues(escrowIdBytes);
+      const escrowId = new BN(Buffer.from(escrowIdBytes), "le");
+
+      const [escrowPda] = deriveTokenEscrowPda(w.publicKey, escrowId);
+      const [vaultPda] = deriveTokenVaultPda(escrowPda);
+
+      const amountRaw = new BN(Math.round(amount * Math.pow(10, decimals)));
+      const deadlineUnix = new BN(Math.floor((Date.now() + deadline_hours * 3600000) / 1000));
+      const termsHash = terms
+        ? Array.from(createHash("sha256").update(terms).digest())
+        : Array(32).fill(0);
+
+      const creatorTokenAccount = await getAssociatedTokenAddress(mintPubkey, w.publicKey);
+
+      await program.methods
+        .createTokenEscrow(escrowId, amountRaw, deadlineUnix, termsHash, 10, new BN(0))
+        .accounts({
+          escrowAccount: escrowPda,
+          vault: vaultPda,
+          creator: w.publicKey,
+          recipient: recipientPubkey,
+          arbiter: arbiterPubkey,
+          feeRecipient: feeRecipientPubkey,
+          mint: mintPubkey,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: new PublicKey("SysvarRent111111111111111111111111"),
+        })
+        .rpc();
+
+      return json({
+        escrowId: escrowPda.toBase58(),
+        type: "token",
+        mint,
+        amount,
+        decimals,
+        recipient,
+        deadline: new Date(Date.now() + deadline_hours * 3600000).toISOString(),
+        network: NETWORK,
+        status: "created",
+      });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  "accept_token_escrow",
+  "Accept a token escrow task as executor. Works with any SPL token.",
+  {
+    escrow_id: z.string().describe("Token escrow PDA address"),
+  },
+  async ({ escrow_id }) => {
+    try {
+      const w = requireWallet();
+      const program = getProgram();
+
+      await program.methods
+        .acceptTokenTask()
+        .accounts({
+          escrowAccount: new PublicKey(escrow_id),
+          recipient: w.publicKey,
+        })
+        .rpc();
+
+      return json({ escrowId: escrow_id, status: "active" });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  "release_token_payment",
+  "Release token escrow payment to executor. Supports any SPL token. Creator only.",
+  {
+    escrow_id: z.string().describe("Token escrow PDA address"),
+  },
+  async ({ escrow_id }) => {
+    try {
+      const w = requireWallet();
+      const program = getProgram();
+      const escrowPubkey = new PublicKey(escrow_id);
+
+      const escrowData = await program.account.tokenEscrowAccount.fetch(escrowPubkey);
+      const recipientPubkey = escrowData.recipient as PublicKey;
+      const mintPubkey = escrowData.mint as PublicKey;
+      const feeRecipientPubkey = escrowData.feeRecipient as PublicKey;
+
+      const [vaultPda] = deriveTokenVaultPda(escrowPubkey);
+      const recipientTokenAccount = await getAssociatedTokenAddress(mintPubkey, recipientPubkey);
+      const feeTokenAccount = await getAssociatedTokenAddress(mintPubkey, feeRecipientPubkey);
+
+      const sig = await program.methods
+        .releaseTokenPayment()
+        .accounts({
+          escrowAccount: escrowPubkey,
+          vault: vaultPda,
+          creator: w.publicKey,
+          recipient: recipientPubkey,
+          recipientTokenAccount,
+          feeTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      return json({ escrowId: escrow_id, signature: sig, status: "completed" });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  "refund_token_escrow",
+  "Refund token escrow. Creator can cancel if Created, or refund after deadline if Active.",
+  {
+    escrow_id: z.string().describe("Token escrow PDA address"),
+  },
+  async ({ escrow_id }) => {
+    try {
+      const w = requireWallet();
+      const program = getProgram();
+      const escrowPubkey = new PublicKey(escrow_id);
+
+      const escrowData = await program.account.tokenEscrowAccount.fetch(escrowPubkey);
+      const mintPubkey = escrowData.mint as PublicKey;
+
+      const [vaultPda] = deriveTokenVaultPda(escrowPubkey);
+      const creatorTokenAccount = await getAssociatedTokenAddress(mintPubkey, w.publicKey);
+
+      const sig = await program.methods
+        .refundTokenEscrow()
+        .accounts({
+          escrowAccount: escrowPubkey,
+          vault: vaultPda,
+          creator: w.publicKey,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      return json({ escrowId: escrow_id, signature: sig, status: "refunded" });
+    } catch (e: any) {
+      return text(`Error: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  "get_token_escrow",
+  "Get token escrow status and details (works with any SPL token)",
+  {
+    escrow_id: z.string().describe("Token escrow PDA address"),
+  },
+  async ({ escrow_id }) => {
+    try {
+      const program = getProgram();
+      const escrowPubkey = new PublicKey(escrow_id);
+
+      const data = await program.account.tokenEscrowAccount.fetch(escrowPubkey);
+
+      const statusMap: Record<string, string> = {};
+      const status = data.status as any;
+      const statusStr = status.created !== undefined ? "created"
+        : status.active !== undefined ? "active"
+        : status.completed !== undefined ? "completed"
+        : status.disputed !== undefined ? "disputed"
+        : status.refunded !== undefined ? "refunded"
+        : status.cancelled !== undefined ? "cancelled"
+        : "unknown";
+
+      return json({
+        id: escrow_id,
+        type: "token",
+        creator: (data.creator as PublicKey).toBase58(),
+        recipient: (data.recipient as PublicKey).toBase58(),
+        mint: (data.mint as PublicKey).toBase58(),
+        amount: (data.amount as BN).toString(),
+        status: statusStr,
+        deadline: new Date((data.deadline as BN).toNumber() * 1000).toISOString(),
+        feeBasisPoints: data.feeBasisPoints,
+        createdAt: new Date((data.createdAt as BN).toNumber() * 1000).toISOString(),
         network: NETWORK,
       });
     } catch (e: any) {
