@@ -1,0 +1,17 @@
+{
+  "name": "@aion-sdk/agentbets",
+  "version": "0.1.0",
+  "description": "AgentBets prediction market integration for AION SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo 'no tests yet'"
+  },
+  "keywords": ["solana", "prediction-markets", "agentbets", "ai-agents"],
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
