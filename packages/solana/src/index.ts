@@ -62,19 +62,38 @@ export {
 export {
   SolanaEscrow,
   EscrowStatus,
+  MilestoneStatus,
   ESCROW_PROGRAM_ID,
   DEFAULT_FEE_PERCENT,
   MAX_FEE_PERCENT,
   AION_TREASURY,
   deriveEscrowPda,
   deriveReputationPda,
+  deriveMilestoneEscrowPda,
   type EscrowConfig,
   type EscrowState,
   type CreateEscrowParams,
+  type CreateMilestoneEscrowParams,
+  type MilestoneInput,
+  type MilestoneState,
+  type MilestoneEscrowState,
+  type DisputeWinner,
   type FeeConfig,
   type SolanaEscrowOptions,
   type AgentReputation,
 } from './escrow';
+
+// Errors
+export {
+  AionSdkError,
+  EscrowNotFoundError,
+  UnauthorizedError,
+  InvalidInputError,
+  InvalidStatusError,
+  DeadlineError,
+  MilestoneError,
+  mapProgramError,
+} from './errors';
 
 // x402 Payment Flow
 export {

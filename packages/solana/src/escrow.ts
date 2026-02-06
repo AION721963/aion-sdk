@@ -19,6 +19,8 @@ import {
   type EscrowConfig,
   type EscrowState,
   EscrowStatus,
+  MilestoneStatus,
+  type DisputeWinner,
   type FeeConfig,
   DEFAULT_FEE_PERCENT,
   MAX_FEE_PERCENT,
@@ -34,8 +36,8 @@ import {
 import escrowIdl from './idl/escrow.json';
 
 // Re-export types from core
-export type { EscrowConfig, EscrowState, FeeConfig, Network } from '@aion-sdk/core';
-export { EscrowStatus, DEFAULT_FEE_PERCENT, MAX_FEE_PERCENT, AION_TREASURY, getRpcEndpoint, RPC_ENDPOINTS } from '@aion-sdk/core';
+export type { EscrowConfig, EscrowState, FeeConfig, Network, DisputeWinner } from '@aion-sdk/core';
+export { EscrowStatus, MilestoneStatus, DEFAULT_FEE_PERCENT, MAX_FEE_PERCENT, AION_TREASURY, getRpcEndpoint, RPC_ENDPOINTS } from '@aion-sdk/core';
 
 /** Deployed escrow program ID */
 export const ESCROW_PROGRAM_ID = new PublicKey('EFnubV4grWUCFRPkRTTNVxEdetxYb8VJtAAqQQmxmw8X');
@@ -96,6 +98,78 @@ export function deriveReputationPda(
     [Buffer.from('reputation'), agent.toBuffer()],
     programId,
   );
+}
+
+/**
+ * Derive PDA for a milestone escrow account
+ */
+export function deriveMilestoneEscrowPda(
+  creator: PublicKey,
+  escrowId: BN | number | bigint,
+  programId: PublicKey = ESCROW_PROGRAM_ID,
+): [PublicKey, number] {
+  const idBuffer = Buffer.alloc(8);
+  idBuffer.writeBigUInt64LE(BigInt(escrowId.toString()));
+
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from('milestone_escrow'), creator.toBuffer(), idBuffer],
+    programId,
+  );
+}
+
+/**
+ * Input for a single milestone when creating a milestone escrow
+ */
+export interface MilestoneInput {
+  /** Amount in SOL for this milestone */
+  amount: number;
+  /** Description of this milestone (will be SHA256 hashed) */
+  description: string;
+}
+
+/**
+ * Milestone state from on-chain
+ */
+export interface MilestoneState {
+  amount: bigint;
+  status: MilestoneStatus;
+  descriptionHash: string;
+}
+
+/**
+ * Milestone escrow creation parameters
+ */
+export interface CreateMilestoneEscrowParams {
+  /** Recipient (executor) wallet address */
+  recipient: string;
+  /** Deadline as Date or Unix timestamp (ms) */
+  deadline: Date | number;
+  /** Optional overall terms description */
+  terms?: string;
+  /** Optional arbiter for disputes */
+  arbiter?: string;
+  /** Milestones (1-10). Amounts are in SOL. */
+  milestones: MilestoneInput[];
+}
+
+/**
+ * Milestone escrow state from on-chain
+ */
+export interface MilestoneEscrowState {
+  id: string;
+  creator: PublicKey;
+  recipient: PublicKey;
+  totalAmount: bigint;
+  releasedAmount: bigint;
+  status: EscrowStatus;
+  deadline: number;
+  termsHash: string;
+  arbiter: PublicKey;
+  feeBasisPoints: number;
+  feeRecipient: PublicKey;
+  createdAt: number;
+  milestoneCount: number;
+  milestones: MilestoneState[];
 }
 
 /**
@@ -593,6 +667,312 @@ export class SolanaEscrow {
     }
 
     return this.initReputation(agent);
+  }
+
+  // ── Dispute Resolution ───────────────────────────────────────────
+
+  /**
+   * Resolve a dispute (arbiter only)
+   *
+   * @param escrowId - The escrow PDA address
+   * @param winner - 'creator' or 'recipient'
+   * @returns Transaction signature
+   */
+  async resolveDispute(escrowId: string, winner: DisputeWinner): Promise<string> {
+    const program = this.getProgram();
+    const escrowPubkey = new PublicKey(escrowId);
+    const escrowData = await program.account.escrowAccount.fetch(escrowPubkey);
+
+    const creatorPubkey = escrowData.creator as PublicKey;
+    const recipientPubkey = escrowData.recipient as PublicKey;
+    const feeRecipientPubkey = escrowData.feeRecipient as PublicKey;
+
+    const [creatorRepPda] = deriveReputationPda(creatorPubkey);
+    const [recipientRepPda] = deriveReputationPda(recipientPubkey);
+    const creatorRepExists = await this.accountExists(creatorRepPda);
+    const recipientRepExists = await this.accountExists(recipientRepPda);
+
+    const accounts: Record<string, PublicKey> = {
+      escrowAccount: escrowPubkey,
+      arbiter: this.signer.publicKey,
+      creator: creatorPubkey,
+      recipient: recipientPubkey,
+      feeRecipient: feeRecipientPubkey,
+    };
+
+    if (creatorRepExists) accounts.creatorReputation = creatorRepPda;
+    if (recipientRepExists) accounts.recipientReputation = recipientRepPda;
+
+    const winnerEnum = winner === 'creator' ? { creator: {} } : { recipient: {} };
+
+    const sig = await program.methods
+      .resolveDispute(winnerEnum)
+      .accounts(accounts)
+      .rpc();
+
+    return sig;
+  }
+
+  // ── Milestone Escrow ────────────────────────────────────────────
+
+  /**
+   * Create a milestone-based escrow
+   *
+   * Splits work into up to 10 milestones, each with its own payment.
+   * Creator can release payments milestone by milestone.
+   *
+   * @param params - Milestone escrow creation parameters
+   * @returns Milestone escrow PDA address
+   */
+  async createMilestoneEscrow(params: CreateMilestoneEscrowParams): Promise<string> {
+    const program = this.getProgram();
+
+    if (params.milestones.length < 1 || params.milestones.length > 10) {
+      throw new Error('Milestones must be between 1 and 10');
+    }
+
+    const deadlineUnix = new BN(
+      Math.floor(
+        (params.deadline instanceof Date ? params.deadline.getTime() : params.deadline) / 1000,
+      ),
+    );
+
+    const termsHash = params.terms
+      ? Array.from(createHash('sha256').update(params.terms).digest())
+      : Array(32).fill(0);
+
+    const escrowIdBytes = new Uint8Array(8);
+    crypto.getRandomValues(escrowIdBytes);
+    const escrowId = new BN(Buffer.from(escrowIdBytes), 'le');
+
+    const recipientPubkey = new PublicKey(params.recipient);
+    const arbiterPubkey = params.arbiter
+      ? new PublicKey(params.arbiter)
+      : this.signer.publicKey;
+    const feeRecipientPubkey = new PublicKey(this.feeRecipient);
+    const feeBasisPoints = Math.round(this.feePercent * 100);
+
+    const [escrowPda] = deriveMilestoneEscrowPda(this.signer.publicKey, escrowId);
+
+    // Convert milestones: SOL → lamports, description → SHA256 hash
+    const milestoneInputs = params.milestones.map((m) => ({
+      amount: new BN(Math.round(m.amount * LAMPORTS_PER_SOL)),
+      descriptionHash: Array.from(createHash('sha256').update(m.description).digest()),
+    }));
+
+    await program.methods
+      .createMilestoneEscrow(escrowId, deadlineUnix, termsHash, feeBasisPoints, milestoneInputs)
+      .accounts({
+        escrowAccount: escrowPda,
+        creator: this.signer.publicKey,
+        recipient: recipientPubkey,
+        arbiter: arbiterPubkey,
+        feeRecipient: feeRecipientPubkey,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    return escrowPda.toBase58();
+  }
+
+  /**
+   * Accept a milestone task as the executor
+   *
+   * @param escrowId - The milestone escrow PDA address
+   * @returns Transaction signature
+   */
+  async acceptMilestoneTask(escrowId: string): Promise<string> {
+    const program = this.getProgram();
+    const escrowPubkey = new PublicKey(escrowId);
+
+    const sig = await program.methods
+      .acceptMilestoneTask()
+      .accounts({
+        escrowAccount: escrowPubkey,
+        recipient: this.signer.publicKey,
+      })
+      .rpc();
+
+    return sig;
+  }
+
+  /**
+   * Release payment for a specific milestone (creator only)
+   *
+   * @param escrowId - The milestone escrow PDA address
+   * @param milestoneIndex - Index of the milestone to release (0-9)
+   * @returns Transaction signature
+   */
+  async releaseMilestone(escrowId: string, milestoneIndex: number): Promise<string> {
+    const program = this.getProgram();
+    const escrowPubkey = new PublicKey(escrowId);
+    const escrowData = await program.account.milestoneEscrowAccount.fetch(escrowPubkey);
+
+    const sig = await program.methods
+      .releaseMilestone(milestoneIndex)
+      .accounts({
+        escrowAccount: escrowPubkey,
+        creator: this.signer.publicKey,
+        recipient: escrowData.recipient as PublicKey,
+        feeRecipient: escrowData.feeRecipient as PublicKey,
+      })
+      .rpc();
+
+    return sig;
+  }
+
+  /**
+   * Dispute a specific milestone (creator or executor)
+   *
+   * @param escrowId - The milestone escrow PDA address
+   * @param milestoneIndex - Index of the milestone to dispute (0-9)
+   * @returns Transaction signature
+   */
+  async disputeMilestone(escrowId: string, milestoneIndex: number): Promise<string> {
+    const program = this.getProgram();
+    const escrowPubkey = new PublicKey(escrowId);
+
+    const sig = await program.methods
+      .disputeMilestone(milestoneIndex)
+      .accounts({
+        escrowAccount: escrowPubkey,
+        disputer: this.signer.publicKey,
+      })
+      .rpc();
+
+    return sig;
+  }
+
+  /**
+   * Resolve a milestone dispute (arbiter only)
+   *
+   * @param escrowId - The milestone escrow PDA address
+   * @param milestoneIndex - Index of the disputed milestone (0-9)
+   * @param winner - 'creator' or 'recipient'
+   * @returns Transaction signature
+   */
+  async resolveMilestoneDispute(
+    escrowId: string,
+    milestoneIndex: number,
+    winner: DisputeWinner,
+  ): Promise<string> {
+    const program = this.getProgram();
+    const escrowPubkey = new PublicKey(escrowId);
+    const escrowData = await program.account.milestoneEscrowAccount.fetch(escrowPubkey);
+
+    const winnerEnum = winner === 'creator' ? { creator: {} } : { recipient: {} };
+
+    const sig = await program.methods
+      .resolveMilestoneDispute(milestoneIndex, winnerEnum)
+      .accounts({
+        escrowAccount: escrowPubkey,
+        arbiter: this.signer.publicKey,
+        creator: escrowData.creator as PublicKey,
+        recipient: escrowData.recipient as PublicKey,
+        feeRecipient: escrowData.feeRecipient as PublicKey,
+      })
+      .rpc();
+
+    return sig;
+  }
+
+  /**
+   * Refund unreleased milestones (creator only)
+   *
+   * - If status is Created: refund anytime
+   * - If status is Active: only after deadline passed
+   *
+   * @param escrowId - The milestone escrow PDA address
+   * @returns Transaction signature
+   */
+  async refundMilestoneEscrow(escrowId: string): Promise<string> {
+    const program = this.getProgram();
+    const escrowPubkey = new PublicKey(escrowId);
+
+    const sig = await program.methods
+      .refundMilestoneEscrow()
+      .accounts({
+        escrowAccount: escrowPubkey,
+        creator: this.signer.publicKey,
+      })
+      .rpc();
+
+    return sig;
+  }
+
+  /**
+   * Get milestone escrow state
+   *
+   * @param escrowId - The milestone escrow PDA address
+   * @returns Milestone escrow state or null if not found
+   */
+  async getMilestoneEscrow(escrowId: string): Promise<MilestoneEscrowState | null> {
+    const program = this.getProgram();
+    const escrowPubkey = new PublicKey(escrowId);
+
+    try {
+      const data = await program.account.milestoneEscrowAccount.fetch(escrowPubkey);
+      return this.mapOnChainToMilestoneEscrowState(escrowPubkey, data);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * List milestone escrows created by the current signer
+   */
+  async listMyMilestoneEscrows(): Promise<MilestoneEscrowState[]> {
+    const program = this.getProgram();
+
+    const accounts = await program.account.milestoneEscrowAccount.all([
+      {
+        memcmp: {
+          offset: 8, // After discriminator: creator is first field
+          bytes: this.signer.publicKey.toBase58(),
+        },
+      },
+    ]);
+
+    return accounts.map((a) => this.mapOnChainToMilestoneEscrowState(a.publicKey, a.account));
+  }
+
+  // ── Private helpers ─────────────────────────────────────────────
+
+  private getMilestoneStatusFromAnchor(status: any): MilestoneStatus {
+    if (status.pending !== undefined) return MilestoneStatus.Pending;
+    if (status.released !== undefined) return MilestoneStatus.Released;
+    if (status.disputed !== undefined) return MilestoneStatus.Disputed;
+    return MilestoneStatus.Pending;
+  }
+
+  private mapOnChainToMilestoneEscrowState(pubkey: PublicKey, data: any): MilestoneEscrowState {
+    const milestoneCount = data.milestoneCount as number;
+    const rawMilestones = data.milestones as any[];
+
+    const milestones: MilestoneState[] = rawMilestones
+      .slice(0, milestoneCount)
+      .map((m: any) => ({
+        amount: BigInt(m.amount.toString()),
+        status: this.getMilestoneStatusFromAnchor(m.status),
+        descriptionHash: Buffer.from(m.descriptionHash as number[]).toString('hex'),
+      }));
+
+    return {
+      id: pubkey.toBase58(),
+      creator: data.creator as PublicKey,
+      recipient: data.recipient as PublicKey,
+      totalAmount: BigInt(data.totalAmount.toString()),
+      releasedAmount: BigInt(data.releasedAmount.toString()),
+      status: this.getStatusFromAnchor(data.status),
+      deadline: (data.deadline as BN).toNumber() * 1000,
+      termsHash: Buffer.from(data.termsHash as number[]).toString('hex'),
+      arbiter: data.arbiter as PublicKey,
+      feeBasisPoints: data.feeBasisPoints as number,
+      feeRecipient: data.feeRecipient as PublicKey,
+      createdAt: (data.createdAt as BN).toNumber() * 1000,
+      milestoneCount,
+      milestones,
+    };
   }
 
   private mapOnChainToReputation(data: any): AgentReputation {

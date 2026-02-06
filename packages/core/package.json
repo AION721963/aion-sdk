@@ -38,5 +38,8 @@
     "url": "https://github.com/AION721963/aion-sdk.git",
     "directory": "packages/core"
   },
-  "keywords": ["aion", "solana", "ai-agents", "sdk"]
+  "keywords": ["aion", "solana", "ai-agents", "sdk"],
+  "publishConfig": {
+    "access": "public"
+  }
 }

@@ -124,6 +124,20 @@ export function calculateFee(amount: bigint, feePercent: number): bigint {
 }
 
 /**
+ * Milestone status enum (for milestone-based escrows)
+ */
+export enum MilestoneStatus {
+  Pending = 'pending',
+  Released = 'released',
+  Disputed = 'disputed',
+}
+
+/**
+ * Dispute winner for resolving disputes
+ */
+export type DisputeWinner = 'creator' | 'recipient';
+
+/**
  * Result type for SDK operations
  */
 export type Result<T, E = Error> =

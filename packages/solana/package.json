@@ -59,5 +59,8 @@
     "escrow",
     "ai-agents",
     "moltbook"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }
