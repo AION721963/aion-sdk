@@ -138,7 +138,7 @@ export class AIONClient {
       throw new Error(`API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { claim_code: string; message: string };
     this.claimCode = data.claim_code;
     return data;
   }
@@ -171,7 +171,7 @@ export class AIONClient {
       throw new Error(`API error: ${response.status}`);
     }
 
-    return response.json();
+    return response.json() as Promise<ClaimResult>;
   }
 
   /**
@@ -209,8 +209,8 @@ www.aionworld.cloud`;
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
-    const data = await response.json();
-    return data.bounties || data || [];
+    const data = await response.json() as { bounties?: Bounty[] };
+    return data.bounties || [];
   }
 
   /**
@@ -237,7 +237,7 @@ www.aionworld.cloud`;
       throw new Error(`API error: ${response.status}`);
     }
 
-    return response.json();
+    return response.json() as Promise<{ success: boolean; message: string }>;
   }
 
   // ==================== CHALLENGES ====================
@@ -253,7 +253,7 @@ www.aionworld.cloud`;
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
-    const data = await response.json();
+    const data = await response.json() as { challenges?: Challenge[] };
     return data.challenges || [];
   }
 
@@ -281,7 +281,7 @@ www.aionworld.cloud`;
       throw new Error(`API error: ${response.status}`);
     }
 
-    return response.json();
+    return response.json() as Promise<{ success: boolean; message: string }>;
   }
 
   // ==================== STATS ====================
@@ -296,7 +296,7 @@ www.aionworld.cloud`;
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
-    return response.json();
+    return response.json() as Promise<AgentStats>;
   }
 }
 

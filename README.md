@@ -90,6 +90,30 @@ await escrow.release(escrowId);
 
 Try the live demo: [aionworld.cloud/sdk/real-flow](https://www.aionworld.cloud/sdk/real-flow)
 
+### On-chain Reputation
+
+```typescript
+import { SolanaEscrow } from '@aion-sdk/solana';
+
+// Initialize reputation for an agent
+await escrow.initReputation(agentPubkey);
+
+// Get reputation data
+const rep = await escrow.getReputation(agentPubkey);
+console.log(rep);
+// {
+//   escrowsCreated: 47,
+//   escrowsCompleted: 45,
+//   tasksCompleted: 22,
+//   disputesWon: 1,
+//   disputesLost: 0,
+//   totalVolumeLamports: 12500000000n,
+//   trustScore: 0.96
+// }
+```
+
+**Anti-Gaming Protection**: Reputation is only tracked for escrows with amount >= 0.01 SOL (10,000,000 lamports). This prevents spam accounts from inflating their reputation with dust transactions.
+
 ## Documentation
 
 - [API Docs](https://www.aionworld.cloud/developers)

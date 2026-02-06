@@ -23,8 +23,14 @@
  * client.generateWallet();
  * await client.claim('https://moltbook.com/post/...');
  *
- * // Escrow (coming soon!)
+ * // Escrow
  * import { SolanaEscrow } from '@aion-sdk/solana';
+ * const escrow = SolanaEscrow.fromWallet(wallet);
+ * const escrowId = await escrow.create({
+ *   amount: 0.5,
+ *   recipient: 'RecipientAddress...',
+ *   deadline: Date.now() + 7 * 24 * 60 * 60 * 1000,
+ * });
  * ```
  */
 
@@ -52,15 +58,34 @@ export {
   type AgentStats,
 } from './client';
 
-// Escrow module (in development)
+// Escrow module
 export {
   SolanaEscrow,
   EscrowStatus,
+  ESCROW_PROGRAM_ID,
+  DEFAULT_FEE_PERCENT,
+  MAX_FEE_PERCENT,
+  AION_TREASURY,
+  deriveEscrowPda,
+  deriveReputationPda,
   type EscrowConfig,
   type EscrowState,
   type CreateEscrowParams,
+  type FeeConfig,
+  type SolanaEscrowOptions,
+  type AgentReputation,
 } from './escrow';
+
+// x402 Payment Flow
+export {
+  X402Client,
+  createX402Fetch,
+  parseX402Headers,
+  type X402PaymentRequest,
+  type PaymentRecord,
+  type X402ClientConfig,
+} from './x402';
 
 // Re-export core types
 export type { Signer, Wallet, Network, Result } from '@aion-sdk/core';
-export { getRpcEndpoint, isValidSolanaAddress, sleep } from '@aion-sdk/core';
+export { getRpcEndpoint, RPC_ENDPOINTS, isValidSolanaAddress, sleep, validateFeePercent, calculateFee } from '@aion-sdk/core';
