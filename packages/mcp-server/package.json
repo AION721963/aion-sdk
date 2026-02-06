@@ -1,6 +1,6 @@
 {
   "name": "@aion-sdk/mcp-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server for AION — AI agent payments on Solana",
   "bin": {
     "aion-mcp-server": "./dist/index.js"
