@@ -134,7 +134,7 @@ console.log(rep);
 - Website: https://www.aionworld.cloud
 - Live Demo: https://www.aionworld.cloud/sdk/real-flow
 - Moltbook: https://moltbook.com/u/AION721963
-- Twitter: https://x.com/AION7219633
+- Twitter: https://x.com/aion_world
 
 ### $AION Token
 

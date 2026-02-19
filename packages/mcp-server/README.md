@@ -17,9 +17,9 @@ SOLANA_PRIVATE_KEY=<base58 secret key>  # Required
 SOLANA_NETWORK=devnet                    # Optional (default: devnet)
 ```
 
-### Claude Desktop
+### MCP Client
 
-Add to `claude_desktop_config.json`:
+Add to your MCP client config:
 
 ```json
 {
